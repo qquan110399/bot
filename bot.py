@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 TOKEN = "8791321078:AAEpT4N3wZbli5zE3van9MQiqs9e_sWW18o"
 bot = telebot.TeleBot(TOKEN)
 
-ADMIN_NAME = "xHope"
+ADMIN_NAME = "--Shady--"
 ADMIN_IDS = [5225888903]  # THAY ID CỦA BẠN
 
 # ----------------- TỰ ĐỘNG TÍNH SỐ LUỒNG DỰA TRÊN RAM -----------------
@@ -48,7 +48,7 @@ PATHS = ["/", "/index.html", "/api/v1/ping", "/login"]
 
 ADS_MESSAGE = (
     "━━━━━━━━━━━━━━━━━━\n"
-    "💎 **PREMIUM SERVICE BY XHOPE** 💎\n"
+    "💎 **PREMIUM SERVICE BY SHADY** 💎\n"
     "• *Uptime:* `99.9% Online`\n"
     "• *Support:* [xHope](https://t.me/hopedzx)\n"
     "━━━━━━━━━━━━━━━━━━"
