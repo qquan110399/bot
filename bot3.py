@@ -15,7 +15,7 @@ import sys
 TOKEN = "8685376799:AAE6oRnpVsfA5WisqtReVTfviEzB4wqsdh8"   # THAY TOKEN MỚI NẾU CẦN
 bot = telebot.TeleBot(TOKEN)
 
-ADMIN_NAME = "xHope"
+ADMIN_NAME = "sHady"
 ADMIN_IDS = [5225888903]  # THAY ID CỦA BẠN
 
 # ================= AUTO DETECT TÀI NGUYÊN =================
@@ -95,7 +95,7 @@ STATS_FILE = "stats.json"
 USER_AGENTS = ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"]
 PATHS = ["/", "/index.html", "/api/v1/ping", "/login"]
 
-ADS_MESSAGE = "━━━━━━━━━━━━━━━━━━\n💎 PREMIUM SERVICE BY XHOPE 💎\n━━━━━━━━━━━━━━━━━━"
+ADS_MESSAGE = "━━━━━━━━━━━━━━━━━━\n💎 PREMIUM SERVICE BY SHADY 💎\n━━━━━━━━━━━━━━━━━━"
 HELP_MESSAGE = (
     "🌟 HỆ THỐNG ĐIỀU KHIỂN 🌟\n\n"
     "🚀 /attack [IP] [Port]\n"
