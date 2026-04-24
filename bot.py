@@ -10,10 +10,10 @@ import json
 import psutil
 
 # ================= CONFIGURATION =================
-TOKEN = "8791321078:AAGPm_A0yso88cvx9MMwr4ZIznmm_lcLh_c"
+TOKEN = "8791321078:AAHaRa-utrORT9ntXVd8xoF0GsEEcctjdnI"
 bot = telebot.TeleBot(TOKEN)
 
-ADMIN_NAME = "xHope"
+ADMIN_NAME = "Shady"
 ADMIN_IDS = [5225888903]  # THAY ID CỦA BẠN
 
 # ---- TỰ ĐỘNG TÍNH TOÁN SỐ PROCESS VÀ THREAD AN TOÀN ----
@@ -67,7 +67,7 @@ PATHS = ["/", "/index.html", "/api/v1/ping", "/login"]
 
 ADS_MESSAGE = (
     "━━━━━━━━━━━━━━━━━━\n"
-    "💎 **PREMIUM SERVICE BY XHOPE** 💎\n"
+    "💎 **PREMIUM SERVICE** 💎\n"
     "• *Uptime:* `99.9% Online`\n"
     "• *Support:* [xHope](https://t.me/hopedzx)\n"
     "━━━━━━━━━━━━━━━━━━"
