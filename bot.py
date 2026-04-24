@@ -10,7 +10,7 @@ import json
 import psutil
 
 # ================= CONFIGURATION =================
-TOKEN = "8791321078:AAEpT4N3wZbli5zE3van9MQiqs9e_sWW18o"
+TOKEN = "8791321078:AAEjuMGkDP_ZPh79tCGUpQTW8g56UT5rUi0"
 bot = telebot.TeleBot(TOKEN)
 
 ADMIN_NAME = "xHope"
